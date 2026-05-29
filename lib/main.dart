@@ -1,8 +1,6 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
-import 'package:system_tray/system_tray.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'database/usage_db.dart';
 import 'providers/linux_usage_tracker.dart';
@@ -48,24 +46,12 @@ class LinuxScreenTimeApp extends StatefulWidget {
 
 class _LinuxScreenTimeAppState extends State<LinuxScreenTimeApp>
     with WindowListener {
-  final SystemTray _systemTray = SystemTray();
-  final Menu _menu = Menu();
-
   @override
   void initState() {
     super.initState();
     windowManager.addListener(this);
-
-    // In Debug Mode under Wayland/Hyprland, prevent close intercepting
-    // so standard exit handlers work flawlessly without tray dependency.
-    if (kDebugMode) {
-      windowManager.setPreventClose(false);
-      debugPrint(
-          "Running in Debug Mode: Skipping native system tray to prevent Wayland crashes.");
-    } else {
-      windowManager.setPreventClose(true);
-      _initSystemTray();
-    }
+    // Allow standard close behavior so it minimizes/closes cleanly without a tray lock
+    windowManager.setPreventClose(false);
   }
 
   @override
@@ -74,64 +60,12 @@ class _LinuxScreenTimeAppState extends State<LinuxScreenTimeApp>
     super.dispose();
   }
 
-  Future<void> _initSystemTray() async {
-    String iconPath =
-        Platform.isWindows ? 'assets/app_icon.ico' : 'assets/app_icon.png';
-
-    if (Platform.isLinux &&
-        !Platform.executable.contains('.exe') &&
-        !Platform.executable.contains('bundle')) {
-      iconPath = '${Directory.current.path}/assets/app_icon.png';
-    }
-
-    try {
-      await _systemTray.initSystemTray(
-        title: "Screen Time",
-        iconPath: iconPath,
-      );
-
-      await _menu.buildFrom([
-        MenuItemLabel(
-          label: 'Open Dashboard',
-          onClicked: (menuItem) async {
-            await windowManager.show();
-            await windowManager.focus();
-          },
-        ),
-        MenuItemLabel(
-          label: 'Quit',
-          onClicked: (menuItem) async {
-            LinuxUsageTracker.instance.stopTracking();
-            await windowManager.setPreventClose(false);
-            await windowManager.close();
-          },
-        ),
-      ]);
-
-      await _systemTray.setContextMenu(_menu);
-
-      _systemTray.registerSystemTrayEventHandler((eventName) async {
-        if (eventName == kSystemTrayEventClick) {
-          bool isVisible = await windowManager.isVisible();
-          if (isVisible) {
-            await windowManager.hide();
-          } else {
-            await windowManager.show();
-            await windowManager.focus();
-          }
-        }
-      });
-    } catch (e) {
-      debugPrint("Handled native system tray initialization fallback: $e");
-    }
-  }
-
   @override
   void onWindowClose() async {
-    bool isPreventClose = await windowManager.isPreventClose();
-    if (isPreventClose) {
-      await windowManager.hide();
-    }
+    // DO NOT stop tracking here. Let the daemon run in the background!
+    // We just allow the window frame to close cleanly.
+    await windowManager.setPreventClose(false);
+    await windowManager.close();
   }
 
   @override
