@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:system_tray/system_tray.dart';
@@ -32,7 +33,7 @@ void main() async {
 
   await windowManager.waitUntilReadyToShow(windowOptions, () async {
     await windowManager.show();
-    await windowManager.setFocus();
+    await windowManager.focus();
   });
 
   runApp(const LinuxScreenTimeApp());
@@ -45,8 +46,8 @@ class LinuxScreenTimeApp extends StatefulWidget {
   State<LinuxScreenTimeApp> createState() => _LinuxScreenTimeAppState();
 }
 
-// Implement WindowListener to intercept user close actions
-class _LinuxScreenTimeAppState extends State<LinuxScreenTimeApp> with WindowListener {
+class _LinuxScreenTimeAppState extends State<LinuxScreenTimeApp>
+    with WindowListener {
   final SystemTray _systemTray = SystemTray();
   final Menu _menu = Menu();
 
@@ -54,9 +55,17 @@ class _LinuxScreenTimeAppState extends State<LinuxScreenTimeApp> with WindowList
   void initState() {
     super.initState();
     windowManager.addListener(this);
-    // Prevent the window from closing natively so we can hide it instead
-    windowManager.setPreventClose(true); 
-    _initSystemTray();
+
+    // In Debug Mode under Wayland/Hyprland, prevent close intercepting
+    // so standard exit handlers work flawlessly without tray dependency.
+    if (kDebugMode) {
+      windowManager.setPreventClose(false);
+      debugPrint(
+          "Running in Debug Mode: Skipping native system tray to prevent Wayland crashes.");
+    } else {
+      windowManager.setPreventClose(true);
+      _initSystemTray();
+    }
   }
 
   @override
@@ -66,43 +75,63 @@ class _LinuxScreenTimeAppState extends State<LinuxScreenTimeApp> with WindowList
   }
 
   Future<void> _initSystemTray() async {
-    // We point to a standard system icon fallback for local compilation
-    // This will be mapped to our custom SVG once we package for Arch
-    String iconPath = Platform.isWindows ? 'assets/app_icon.ico' : 'assets/app_icon.png';
+    String iconPath =
+        Platform.isWindows ? 'assets/app_icon.ico' : 'assets/app_icon.png';
 
-    await _systemTray.initSystemTray(
-      title: "Screen Time",
-      iconPath: iconPath,
-    );
+    if (Platform.isLinux &&
+        !Platform.executable.contains('.exe') &&
+        !Platform.executable.contains('bundle')) {
+      iconPath = '${Directory.current.path}/assets/app_icon.png';
+    }
 
-    await _menu.buildFrom([
-      MenuItemLabel(label: 'Open Dashboard', onClicked: (menuItem) => windowManager.show()),
-      MenuItemLabel(label: 'Quit', onClicked: (menuItem) async {
-        LinuxUsageTracker.instance.stopTracking();
-        await windowManager.destroy();
-      }),
-    ]);
+    try {
+      await _systemTray.initSystemTray(
+        title: "Screen Time",
+        iconPath: iconPath,
+      );
 
-    await _systemTray.setContextMenu(_menu);
+      await _menu.buildFrom([
+        MenuItemLabel(
+          label: 'Open Dashboard',
+          onClicked: (menuItem) async {
+            await windowManager.show();
+            await windowManager.focus();
+          },
+        ),
+        MenuItemLabel(
+          label: 'Quit',
+          onClicked: (menuItem) async {
+            LinuxUsageTracker.instance.stopTracking();
+            await windowManager.setPreventClose(false);
+            await windowManager.close();
+          },
+        ),
+      ]);
 
-    // Toggle window visibility on tray click
-    _systemTray.registerSystemTrayEventHandler((eventName) async {
-      if (eventName == kSystemTrayEventClick) {
-        bool isVisible = await windowManager.isVisible();
-        if (isVisible) {
-          await windowManager.hide();
-        } else {
-          await windowManager.show();
-          await windowManager.setFocus();
+      await _systemTray.setContextMenu(_menu);
+
+      _systemTray.registerSystemTrayEventHandler((eventName) async {
+        if (eventName == kSystemTrayEventClick) {
+          bool isVisible = await windowManager.isVisible();
+          if (isVisible) {
+            await windowManager.hide();
+          } else {
+            await windowManager.show();
+            await windowManager.focus();
+          }
         }
-      }
-    });
+      });
+    } catch (e) {
+      debugPrint("Handled native system tray initialization fallback: $e");
+    }
   }
 
   @override
   void onWindowClose() async {
-    // Intercept standard window close behavior and hide to tray instead
-    await windowManager.hide();
+    bool isPreventClose = await windowManager.isPreventClose();
+    if (isPreventClose) {
+      await windowManager.hide();
+    }
   }
 
   @override
