@@ -1,6 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import '../database/usage_db.dart';
 
 class LinuxUsageTracker extends ChangeNotifier {
@@ -9,73 +10,75 @@ class LinuxUsageTracker extends ChangeNotifier {
 
   bool _tracking = false;
   String? _lastApp;
-  DateTime? _lastCheck;
+  int _accumulatedSeconds = 0;
+  Timer? _timer;
 
   bool get isTracking => _tracking;
-  String? get currentApp => _lastApp;
 
   void startTracking() {
     if (_tracking) return;
     _tracking = true;
-    _lastCheck = DateTime.now();
-    _trackLoop();
+    _lastApp = null;
+    _accumulatedSeconds = 0;
+
+    _timer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      if (!_tracking) {
+        timer.cancel();
+        return;
+      }
+      await _trackActiveWindow();
+    });
   }
 
   void stopTracking() {
     _tracking = false;
+    _timer?.cancel();
+    _timer = null;
   }
 
-  Future<void> _trackLoop() async {
-    while (_tracking) {
-      await Future.delayed(const Duration(seconds: 5));
-      if (!_tracking) break;
+  Future<void> _trackActiveWindow() async {
+    final rawApp = await _getActiveApp();
+    if (rawApp == null || rawApp.isEmpty) return;
 
-      final currentApp = await _getActiveApp();
+    // Standardize to strict lowercase and trim immediately
+    final normalizedApp = rawApp.toLowerCase().trim();
 
-      if (currentApp != null && currentApp.isNotEmpty) {
-        final now = DateTime.now();
+    if (_lastApp == normalizedApp) {
+      _accumulatedSeconds += 5;
 
-        if (_lastApp != null) {
-          final duration = now.difference(_lastCheck!);
-          final seconds = duration.inSeconds;
-
-          if (seconds >= 5) {
-            final int minutesToLog = (seconds / 60).ceil();
-
-            if (minutesToLog > 0) {
-              await UsageDatabase.instance.insertUsage(
-                now,
-                _lastApp!,
-                minutesToLog,
-              );
-              notifyListeners();
-            }
-          }
-        }
-        _lastApp = currentApp;
-        _lastCheck = now;
+      // Commit exactly when hitting or crossing the 60-second limit
+      if (_accumulatedSeconds >= 60) {
+        await UsageDatabase.instance.insertUsage(
+          DateTime.now(),
+          normalizedApp,
+          1,
+        );
+        _accumulatedSeconds = 0;
+        notifyListeners(); // Alert the UI state streams
       }
+    } else {
+      // Switch context to the new window frame smoothly
+      _lastApp = normalizedApp;
+      _accumulatedSeconds = 0;
     }
   }
 
   Future<String?> _getActiveApp() async {
     try {
-      // Query Hyprland's native controller for the active focused window profile
-      final result = await Process.run('hyprctl', ['activewindow']);
-      if (result.exitCode != 0) return null;
+      final process = await Process.run('hyprctl', ['activewindow', '-j']);
+      if (process.exitCode == 0) {
+        final Map<String, dynamic> data = jsonDecode(process.stdout as String);
 
-      final output = result.stdout.toString();
-
-      // Extract the native window class identifier using a clean RegExp
-      final classMatch = RegExp(r'class:\s*([^\n\r]+)').firstMatch(output);
-      if (classMatch != null) {
-        final appClass = classMatch.group(1)!.trim();
-        if (appClass.isNotEmpty && appClass != "Invalid") {
-          return appClass;
+        // Check window class first, fall back to title if blank
+        String? appClass = data['class'];
+        if (appClass == null || appClass.isEmpty) {
+          appClass = data['title'];
         }
+        return appClass;
       }
     } catch (e) {
-      debugPrint("Error detecting active Hyprland window: $e");
+      // Graceful fallback over native terminal diagnostics
+      return null;
     }
     return null;
   }

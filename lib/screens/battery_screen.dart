@@ -90,13 +90,17 @@ class _BatteryScreenState extends State<BatteryScreen> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Colors.purpleAccent))
+          ? const Center(
+              child: CircularProgressIndicator(color: Colors.purpleAccent))
           : ListView(
               padding: const EdgeInsets.all(24.0),
               children: [
                 const Text(
                   'Power Diagnostics',
-                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+                  style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white),
                 ),
                 const SizedBox(height: 20),
 
@@ -105,7 +109,8 @@ class _BatteryScreenState extends State<BatteryScreen> {
                   width: double.infinity,
                   padding: const EdgeInsets.all(36.0),
                   child: Column(
-                    centerSpace: false,
+                    crossAxisAlignment: CrossAxisAlignment
+                        .center, // Centers horizontal elements cleanly
                     children: [
                       Icon(
                         _getBatteryIcon(_batteryPercentage, _chargingStatus),
@@ -115,19 +120,29 @@ class _BatteryScreenState extends State<BatteryScreen> {
                       const SizedBox(height: 20),
                       Text(
                         "$_batteryPercentage%",
-                        style: const TextStyle(fontSize: 54, fontWeight: FontWeight.w900, color: Colors.white),
+                        style: const TextStyle(
+                            fontSize: 54,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white),
                       ),
                       const SizedBox(height: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 6),
                         decoration: BoxDecoration(
                           color: stateColor.withOpacity(0.12),
-                          borderRadius: const BorderRadius.all(Radius.circular(20)),
-                          border: Border.all(color: stateColor.withOpacity(0.3), width: 1),
+                          borderRadius:
+                              const BorderRadius.all(Radius.circular(20)),
+                          border: Border.all(
+                              color: stateColor.withOpacity(0.3), width: 1),
                         ),
                         child: Text(
                           _chargingStatus.toUpperCase(),
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: stateColor, letterSpacing: 1),
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: stateColor,
+                              letterSpacing: 1),
                         ),
                       ),
                     ],
@@ -140,12 +155,16 @@ class _BatteryScreenState extends State<BatteryScreen> {
                   padding: const EdgeInsets.all(20.0),
                   child: Row(
                     children: [
-                      const Icon(Icons.info_outline_rounded, color: Colors.white38),
+                      const Icon(Icons.info_outline_rounded,
+                          color: Colors.white38),
                       const SizedBox(width: 16),
                       Expanded(
                         child: Text(
                           "Reading sysfs operational nodes directly from /sys/class/power_supply/BAT0/",
-                          style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 13, height: 1.4),
+                          style: TextStyle(
+                              color: Colors.white.withOpacity(0.4),
+                              fontSize: 13,
+                              height: 1.4),
                         ),
                       ),
                     ],

@@ -1,16 +1,16 @@
-import 'dart:io';
+import 'dart:async';
 import 'package:path/path.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 class UsageDatabase {
-  static final UsageDatabase instance = UsageDatabase._init();
+  static final UsageDatabase instance = UsageDatabase._internal();
   static Database? _database;
 
-  UsageDatabase._init();
+  UsageDatabase._internal();
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('screen_time.db');
+    _database = await _initDB('screen_time_usage.db');
     return _database!;
   }
 
@@ -27,63 +27,107 @@ class UsageDatabase {
     );
   }
 
-  Future _createDB(Database db, int version) async {
+  Future<void> _createDB(Database db, int version) async {
     await db.execute('''
-      CREATE TABLE usage (
+      CREATE TABLE usage_table (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        appName TEXT NOT NULL,
-        durationMinutes INTEGER NOT NULL,
-        date TEXT NOT NULL,
-        UNIQUE(appName, date)
+        timestamp TEXT NOT NULL,
+        app_name TEXT NOT NULL,
+        minutes INTEGER NOT NULL
       )
     ''');
   }
 
-  // Insert or Update usage minutes (Upsert)
-  Future<void> insertUsage(DateTime date, String appName, int minutes) async {
-    final db = await instance.database;
-    final dateString = date.toIso8601String().split('T')[0]; // Format: YYYY-MM-DD
-
-    await db.execute('''
-      INSERT INTO usage (appName, durationMinutes, date)
-      VALUES (?, ?, ?)
-      ON CONFLICT(appName, date) DO UPDATE SET
-      durationMinutes = durationMinutes + excluded.durationMinutes
-    ''', [appName, minutes, dateString]);
-  }
-
-  // Fetch usage data for today
-  Future<List<Map<String, dynamic>>> getUsageByDate(DateTime date) async {
-    final db = await instance.database;
-    final dateString = date.toIso8601String().split('T')[0];
-
-    return await db.query(
-      'usage',
-      where: 'date = ?',
-      whereArgs: [dateString],
-      orderBy: 'durationMinutes DESC',
+  Future<void> insertUsage(
+      DateTime dateTime, String appName, int minutes) async {
+    final db = await database;
+    await db.insert(
+      'usage_table',
+      {
+        'timestamp': dateTime.toIso8601String(),
+        'app_name': appName.toLowerCase().trim(),
+        'minutes': minutes,
+      },
     );
   }
 
-  // Fetch usage data for the last 7 days
+  // Returns data with specific 'appName' and 'durationMinutes' aliases for the UI
+  Future<List<Map<String, dynamic>>> getTodayUsage() async {
+    final db = await database;
+    final List<Map<String, dynamic>> results = await db.rawQuery('''
+      SELECT app_name as appName, SUM(minutes) as durationMinutes 
+      FROM usage_table 
+      WHERE date(timestamp) = date('now', 'localtime')
+      GROUP BY app_name
+      ORDER BY durationMinutes DESC
+    ''');
+
+    return results.map((row) {
+      return {
+        'appName': row['appName'] ?? 'unknown application',
+        'durationMinutes': row['durationMinutes'] ?? 0,
+      };
+    }).toList();
+  }
+
+  // Returns data with specific 'appName' and 'durationMinutes' aliases for the UI
+  Future<List<Map<String, dynamic>>> getWeeklyUsage() async {
+    final db = await database;
+    final List<Map<String, dynamic>> results = await db.rawQuery('''
+      SELECT app_name as appName, SUM(minutes) as durationMinutes 
+      FROM usage_table 
+      WHERE date(timestamp) >= date('now', '-6 days', 'localtime')
+      GROUP BY app_name
+      ORDER BY durationMinutes DESC
+    ''');
+
+    return results.map((row) {
+      return {
+        'appName': row['appName'] ?? 'unknown application',
+        'durationMinutes': row['durationMinutes'] ?? 0,
+      };
+    }).toList();
+  }
+
+  // Alias linking method for weekly view screen template
   Future<List<Map<String, dynamic>>> getLast7DaysUsage() async {
-    final db = await instance.database;
-    final now = DateTime.now();
-    final sevenDaysAgo = now.subtract(const Duration(days: 7));
-    final startDateString = sevenDaysAgo.toIso8601String().split('T')[0];
-
-    return await db.query(
-      'usage',
-      where: 'date >= ?',
-      whereArgs: [startDateString],
-      orderBy: 'date DESC, durationMinutes DESC',
-    );
+    return await getWeeklyUsage();
   }
 
-  Future<void> close() async {
-    final db = _database;
-    if (db != null) {
-      await db.close();
+  // Returns data with specific 'appName' and 'durationMinutes' aliases for the UI
+  Future<List<Map<String, dynamic>>> getUsageByDate(DateTime date) async {
+    final db = await database;
+    final String targetDateString =
+        "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+
+    final List<Map<String, dynamic>> results = await db.rawQuery('''
+      SELECT app_name as appName, SUM(minutes) as durationMinutes 
+      FROM usage_table 
+      WHERE date(timestamp) = ?
+      GROUP BY app_name
+      ORDER BY durationMinutes DESC
+    ''', [targetDateString]);
+
+    return results.map((row) {
+      return {
+        'appName': row['appName'] ?? 'unknown application',
+        'durationMinutes': row['durationMinutes'] ?? 0,
+      };
+    }).toList();
+  }
+
+  // Bulletproof fallback calculation check for dashboard indicators
+  Future<int> getTotalMinutesToday() async {
+    final db = await database;
+    final result = await db.rawQuery('''
+      SELECT SUM(minutes) as total 
+      FROM usage_table 
+      WHERE date(timestamp) = date('now', 'localtime')
+    ''');
+
+    if (result.isNotEmpty && result.first['total'] != null) {
+      return int.tryParse(result.first['total'].toString()) ?? 0;
     }
+    return 0;
   }
 }

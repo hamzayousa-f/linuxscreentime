@@ -18,7 +18,8 @@ dependencies:
   path: ^1.9.0
   fl_chart: ^0.66.0
   window_manager: ^0.3.8
-  system_tray: ^2.0.3
+  intl: ^0.20.2
+  
 
 dev_dependencies:
   flutter_test:
@@ -30,4 +31,4 @@ flutter:
 
   # Explicitly declare the assets folder to bundle our tray icon assets
   assets:
-    - assets/
+    - assets/app_icon.png
