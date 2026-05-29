@@ -54,10 +54,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  // Unified formatting logic for both hero totals and app items
   String _formatHoursAndMinutes(int totalMinutes) {
-    if (totalMinutes < 60) return "$totalMinutes mins";
+    if (totalMinutes < 0) return "0m";
+    if (totalMinutes < 60) return "${totalMinutes}m";
+
     final int hours = totalMinutes ~/ 60;
     final int minutes = totalMinutes % 60;
+
     return minutes == 0 ? "${hours}h" : "${hours}h ${minutes}m";
   }
 
@@ -66,13 +70,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Scaffold(
       backgroundColor: Colors.transparent, // Inherit ambient home background
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Colors.purpleAccent))
+          ? const Center(
+              child: CircularProgressIndicator(color: Colors.purpleAccent))
           : ListView(
               padding: const EdgeInsets.all(24.0),
               children: [
                 const Text(
                   'Overview',
-                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+                  style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white),
                 ),
                 const SizedBox(height: 20),
 
@@ -85,12 +93,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     children: [
                       const Text(
                         "TOTAL SCREEN TIME TODAY",
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white38, letterSpacing: 1.5),
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white38,
+                            letterSpacing: 1.5),
                       ),
                       const SizedBox(height: 12),
                       Text(
                         _formatHoursAndMinutes(_totalMinutesToday),
-                        style: const TextStyle(fontSize: 48, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: -1),
+                        style: const TextStyle(
+                            fontSize: 48,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                            letterSpacing: -1),
                       ),
                     ],
                   ),
@@ -99,7 +115,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                 const Text(
                   'Most Used Apps',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.whiteBorders ?? Colors.white70),
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white70),
                 ),
                 const SizedBox(height: 16),
 
@@ -118,33 +137,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         itemCount: _todayUsageList.length,
-                        separatorBuilder: (context, index) => const SizedBox(height: 12),
+                        separatorBuilder: (context, index) =>
+                            const SizedBox(height: 12),
                         itemBuilder: (context, index) {
                           final row = _todayUsageList[index];
-                          final String appName = row['appName'] ?? 'Unknown Process';
-                          final int minutes = (row['durationMinutes'] as num).toInt();
+                          final String appName =
+                              row['appName'] ?? 'Unknown Process';
+                          final int minutes =
+                              (row['durationMinutes'] as num).toInt();
 
                           return GlassContainer(
-                            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 20.0, vertical: 16.0),
                             child: Row(
-                              mainAxisAlignment: MainAxisAlignment.between,
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Row(
                                   children: [
                                     CircleAvatar(
-                                      backgroundColor: Colors.purple.withOpacity(0.2),
-                                      child: const Icon(Icons.star_border_rounded, color: Colors.purpleAccent, size: 20),
+                                      backgroundColor:
+                                          Colors.purple.withOpacity(0.2),
+                                      child: const Icon(
+                                          Icons.star_border_rounded,
+                                          color: Colors.purpleAccent,
+                                          size: 20),
                                     ),
                                     const SizedBox(width: 16),
                                     Text(
                                       appName,
-                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
+                                      style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.white),
                                     ),
                                   ],
                                 ),
                                 Text(
-                                  "${minutes}m",
-                                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.purpleAccent),
+                                  _formatHoursAndMinutes(minutes),
+                                  style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.purpleAccent),
                                 ),
                               ],
                             ),
